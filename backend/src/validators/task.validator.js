@@ -1,7 +1,7 @@
 const { body, param } = require('express-validator');
 const mongoose = require('mongoose');
 
-const createTodoValidator = [
+const createTaskValidator = [
     body('title')
         .trim()
         .notEmpty()
@@ -10,10 +10,10 @@ const createTodoValidator = [
         .withMessage('El título debe tener al menos 3 caracteres'),
 ];
 
-const updateTodoValidator = [
+const updateTaskValidator = [
     param('id')
         .custom((value) => mongoose.Types.ObjectId.isValid(value))
-        .withMessage('ID de ToDo no válido'),
+        .withMessage('ID de Task no válido'),
 
     body('title')
         .optional()
@@ -32,11 +32,11 @@ const updateTodoValidator = [
 const idParamValidator = [
     param('id')
         .custom((value) => mongoose.Types.ObjectId.isValid(value))
-        .withMessage('ID de ToDo no válido'),
+        .withMessage('ID de Task no válido'),
 ];
 
 module.exports = {
-    createTodoValidator,
-    updateTodoValidator,
+    createTaskValidator,
+    updateTaskValidator,
     idParamValidator,
 };

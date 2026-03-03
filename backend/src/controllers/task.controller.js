@@ -1,8 +1,8 @@
-const Todo = require("../models/todo.model");
+const Task = require("../models/task.model");
 const mongoose = require("mongoose");
 
-// Crear todo
-exports.createTodo = async (req, res, next) => {
+// Crear task
+exports.createTask = async (req, res, next) => {
   try {
     const { title } = req.body;
 
@@ -13,33 +13,33 @@ exports.createTodo = async (req, res, next) => {
       });
     }
 
-    const newTodo = await Todo.create({ title });
+    const newTask = await Task.create({ title });
 
     res.status(201).json({
       success: true,
-      data: newTodo,
+      data: newTask,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Obtener todos
-exports.getTodos = async (req, res, next) => {
+// Obtener tasks
+exports.getTasks = async (req, res, next) => {
   try {
-    const todos = await Todo.find().sort({ createdAt: -1 });
+    const tasks = await Task.find().sort({ createdAt: -1 });
 
     res.json({
       success: true,
-      data: todos,
+      data: tasks,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Actualizar todo
-exports.updateTodo = async (req, res, next) => {
+// Actualizar task
+exports.updateTask = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -50,30 +50,30 @@ exports.updateTodo = async (req, res, next) => {
       });
     }
 
-    const updatedTodo = await Todo.findByIdAndUpdate(
+    const updatedTask = await Task.findByIdAndUpdate(
       id,
       req.body,
       { new: true }
     );
 
-    if (!updatedTodo) {
+    if (!updatedTask) {
       return res.status(404).json({
         success: false,
-        message: "ToDo no encontrado",
+        message: "Tarea no encontrada",
       });
     }
 
     res.json({
       success: true,
-      data: updatedTodo,
+      data: updatedTask,
     });
   } catch (error) {
     next(error);
   }
 };
 
-// Eliminar todo
-exports.deleteTodo = async (req, res, next) => {
+// Eliminar task
+exports.deleteTask = async (req, res, next) => {
   try {
     const { id } = req.params;
 
@@ -84,18 +84,18 @@ exports.deleteTodo = async (req, res, next) => {
       });
     }
 
-    const deletedTodo = await Todo.findByIdAndDelete(id);
+    const deletedTask = await Task.findByIdAndDelete(id);
 
-    if (!deletedTodo) {
+    if (!deletedTask) {
       return res.status(404).json({
         success: false,
-        message: "ToDo no encontrado",
+        message: "Tarea no encontrada",
       });
     }
 
     res.json({
       success: true,
-      message: "ToDo eliminado",
+      message: "Tarea eliminada",
     });
   } catch (error) {
     next(error);
