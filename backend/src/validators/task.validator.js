@@ -8,6 +8,10 @@ const createTaskValidator = [
         .withMessage('Se requiere título')
         .isLength({ min: 3 })
         .withMessage('El título debe tener al menos 3 caracteres'),
+    body('completed')
+        .optional()
+        .isBoolean()
+        .withMessage('Completado debe ser verdadero o falso'),
 ];
 
 const updateTaskValidator = [
