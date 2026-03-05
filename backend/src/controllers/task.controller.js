@@ -4,7 +4,7 @@ const mongoose = require("mongoose");
 // Crear task
 exports.createTask = async (req, res, next) => {
   try {
-    const { title, completed } = req.body;
+    const { title, completed} = req.body;
 
     if (!title || title.trim() === "") {
       return res.status(400).json({
@@ -13,7 +13,7 @@ exports.createTask = async (req, res, next) => {
       });
     }
 
-    const newTask = await Task.create({ title, completed});
+    const newTask = await Task.create({ title, completed });
 
     res.status(201).json({
       success: true,
