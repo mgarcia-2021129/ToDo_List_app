@@ -1,0 +1,321 @@
+:root {
+    --color-primary: #7178c4;
+    --color-bg: #f8f8fa;
+    --color-card: #ffffff;
+    --color-task-bg: #e4e8e8;
+    --color-border: #d8dbe4;
+    --color-text-secondary: #9dacc1;
+
+    --radius-lg: 14px;
+    --radius-md: 10px;
+
+    --shadow-soft: 0 8px 25px rgba(0, 0, 0, 0.05);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+/* Layout principal */
+body {
+    font-family: system-ui, -apple-system, sans-serif;
+    background: white;
+    color: #222;
+    margin: 0;
+}
+
+.page {
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 0 20px;
+}
+
+/* Header */
+
+.header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.title {
+    font-size: 34px;
+    font-weight: 700;
+    color: #686a81;
+    margin-bottom: 20px;
+    text-align: center;
+}
+
+/* Top Controls */
+
+.controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 8px;
+    gap: 10px;
+}
+
+button.primary-btn {
+    background:  #686cf4;
+    color: white;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 14px;
+    height: 38px;
+    display: flex;
+    align-items: center;
+}
+
+button.primary-btn:hover {
+    opacity: 0.9;
+}
+
+select {
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: none;
+    background: #ccccdc;
+    font-size: 14px;
+    font-weight: 600;
+    color:  #747075;
+    cursor: pointer;
+    outline: none;
+    width: 140px;
+}
+
+/* Responsive */
+
+@media (max-width: 600px) {
+    .controls {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .controls button,
+    .controls select {
+        width: 100%;
+    }
+}
+
+/* Task List */
+
+.task-list {
+    margin-top: 0px;
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    min-height: 50px;
+    justify-content: center;
+    align-items: center;
+}
+
+.task-item {
+    background: white;
+    padding: 14px 18px;
+    border-radius: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    width: 100%;
+    margin: 0 auto; 
+}
+
+.square-box {
+    width: 34px;
+    height: 34px;
+    background: #e4e8e8;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: 300;
+    color: transparent;
+    transition: 0.2s ease;
+}
+
+.square-box.checked {
+    background: #686cf4;
+    color: white;
+}
+
+.custom-checkbox {
+    width: 16px;
+    height: 16px;
+    cursor: pointer;
+}
+
+.task-item:hover {
+    transform: translateY(-2px);
+}
+
+.task-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.task-title {
+    font-size: 15px;
+    font-weight: 500;
+    color: #696461 ;
+}
+
+.task-date {
+    font-size: 12px;
+    color: #656874;
+    margin-top: 4px;
+}
+
+.task-actions {
+    display: flex;
+    gap: 8px;
+}
+
+.icon-btn:hover {
+    background: rgba(0, 0, 0, 0.05);
+}
+
+.icon-btn.delete {
+    background: #ffffff;
+}
+
+.task-wrapper {
+    background: #eef1f6;
+    padding: 20px;
+    border-radius: 12px;
+}
+
+.task-title.completed {
+    text-decoration: line-through;
+    opacity: 0.6;
+}
+
+/* Modal Overlay */
+.modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: grid;
+    place-items: center;
+    z-index: 1000;
+}
+
+.modal-container {
+    position: relative;
+    width: 100%;
+    max-width: 500px;
+}
+
+.floating-close {
+    position: absolute;
+    top: -40px;
+    right: 0;
+    background: #e4e8e8;
+    border: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    cursor: pointer;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.15);
+}
+
+/* Modal Box */
+.modal {
+    background: #f0ecf4;
+    padding: 25px;
+    width: 100%;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+    max-height: 90vh;
+    overflow-y: auto;
+}
+
+/* Modal Buttons */
+.modal-buttons {
+    display: flex;
+    gap: 12px;
+    margin-top: 20px;
+}
+
+.cancel-btn {
+    background: #e4e8e8;
+    border: none;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    color: #555;
+}
+
+.cancel-btn:hover {
+    opacity: 0.9;
+}
+
+.secondary-btn {
+    background: #d5d9d9;
+    border: none;
+    padding: 10px 20px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 600;
+    color: #666565;
+}
+
+.secondary-btn:hover {
+    opacity: 0.7;
+}
+
+.modal input,
+.modal select {
+    background: white;
+    width: 100%;
+    margin-top: 6px;
+    margin-bottom: 20px;
+    padding: 10px;
+    border-radius: 0px;
+    border: 1px solid #ddd;
+}
+
+.modal select {
+    color: #000000;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.modal label {
+    font-size: 16px;
+    font-weight: 480;
+    color: #636571;
+    margin-bottom: 0px;
+    display: block;
+}
+
+.empty-state {
+    background: #e4e8e8;
+    padding: 12px 18px;
+    border-radius: 8px;
+    color: #737685;
+    font-weight: 600;
+}
+
+.modal-title {
+    font-size: 22px;
+    font-weight: 700;
+    color: #686a81;
+}
+
+.modal h2 {
+    margin-bottom: 30px;
+    font-size: 22px;
+    font-weight: 600;
+    color: #686a81;
+}
