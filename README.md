@@ -8,11 +8,40 @@ La solución contempla una arquitectura desacoplada entre frontend y backend, se
 
 ---
 
+### Demo
+
+La aplicación se encuentra desplegada y puede probarse directamente desde el navegador.
+
+Frontend
+
+https://todo-frontend-65nh.onrender.com
+
+Backend API
+
+https://todo-backend-j9lo.onrender.com
+
+Ejemplo de endpoint:
+
+GET /api/tasks
+
+URL completa:
+
+https://todo-backend-j9lo.onrender.com/api/tasks
+
+La API puede ser consumida mediante herramientas como Postman o directamente desde el frontend desplegado.
+
+---
+
 ## Descripción del Proyecto
 
-Todo List App es una aplicación web que permite la gestión de tareas mediante operaciones de creación, actualización, completado y eliminación.
+Todo List App es una aplicación web que permite la gestión de tareas mediante operaciones de:
 
-La aplicación garantiza persistencia de datos mediante una base de datos MongoDB y está diseñada para ejecutarse tanto en entorno local como en producción.
+- Crear tareas
+- Actualizar tareas
+- Marcar tareas como completadas
+- Eliminar tareas
+
+La aplicación garantiza persistencia de datos mediante MongoDB y está diseñada para ejecutarse tanto en entorno local como en producción.
 
 El enfoque principal del proyecto es demostrar:
 
@@ -34,12 +63,14 @@ La aplicación está compuesta por dos componentes principales:
 
 API REST desarrollada en Node.js con Express, organizada bajo una arquitectura por capas:
 
-- Routes: definición de endpoints
-- Controllers: manejo de solicitudes HTTP
-- Services: lógica de negocio
-- Repositories: acceso a datos
-- Models: definición de esquemas
-- Middlewares: manejo global de errores
+- config: configuración de la base de datos y variables de entorno
+- controllers: manejo de solicitudes HTTP
+- middlewares: manejo de errores y validaciones globales
+- models: definición de esquemas de datos
+- routes: definición de endpoints
+- validators: validaciones de datos de entrada
+
+Además, los tests se encuentran en la carpeta tests a nivel de backend.
 
 Esta estructura favorece la mantenibilidad, escalabilidad y claridad del código.
 
@@ -68,11 +99,13 @@ La estructura del frontend mantiene separación entre:
 
 La persistencia se realiza mediante MongoDB.
 
-En entorno de desarrollo local, la base de datos se ejecuta dentro de un contenedor Docker utilizando Docker Compose.
+Desarrollo Local
 
-En entorno de producción, se utiliza MongoDB Atlas como servicio administrado.
+En entorno local, la base de datos se ejecuta utilizando Docker Compose, lo que permite levantar todos los servicios necesarios con un solo comando.
 
-El acceso a datos se abstrae mediante una capa de repositorio, evitando el acoplamiento directo entre la lógica de negocio y la base de datos.
+Producción
+
+En producción, la base de datos está desplegada en MongoDB Atlas, un servicio administrado en la nube que permite mantener la persistencia de datos de forma segura y escalable.
 
 ---
 
@@ -117,21 +150,103 @@ Cada carpeta contiene su propia configuración, dependencias y estructura intern
 
 ### Requisitos Previos
 
-- Node.js versión 18 o superior
+Antes de ejecutar el proyecto se debe tener instalado:
+
+- Node.js v20.20.0
+- npm v10.8.2
 - Docker
-- Cuenta en MongoDB Atlas (para producción)
+- Docker Compose
+- MongoDB Compass
+- Git
 
-### Entorno Local
+1. Clonar el repositorio
+2. Configurar variables de entorno
 
-1. Clonar el repositorio.
-2. Configurar variables de entorno a partir del archivo `.env`.
-3. Ejecutar Docker Compose para levantar base de datos y backend.
-4. Iniciar el frontend en modo desarrollo.
+El proyecto utiliza archivos .env para la configuración de variables de entorno.
 
-Las instrucciones detalladas serán incluidas en la versión final del proyecto.
+Cada servicio incluye un archivo .env.example como referencia.
+
+### Backend
+
+En la carpeta backend crear un archivo .env utilizando como base .env.example.
+
+Ejemplo:
+
+PORT=5000
+
+MONGO_URI=mongodb://mongo:27017/todo_db
+
+### Frontend
+
+En la carpeta frontend crear un archivo .env utilizando como base .env.example.
+
+Ejemplo:
+
+VITE_API_URL=http://localhost:5000
+
+### Ejecución en Entorno Local
+
+Una vez configuradas las variables de entorno, ejecutar desde la raiz del proyecto:
+
+docker compose up --build
+
+<img width="376" height="17" alt="image" src="https://github.com/user-attachments/assets/98f5913c-cf79-4195-8a36-4c9961567591" />
+
+Este comando levantará automáticamente:
+
+- Base de datos MongoDB
+- Backend (API REST)
+- Frontend (React)
+
+Una vez iniciados los contenedores, la aplicación estará disponible en:
+
+Frontend
+http://localhost:5173
+
+Backend API
+http://localhost:5000
+
+### Exploración mediante MongoDB Compass
+
+Pasos básicos:
+
+1. Abrir MongoDB Compass.
+2. Seleccionar New Connection.
+3. Pegar la cadena de conexión de MongoDB. (mongodb://localhost:27018/)
+4. Haz clic en Connect.
+
+### Cómo ver la base de datos del proyecto en MongoDB Atlas
+1. Abrir MongoDB Compass.
+2. Seleccionar New Connection.
+3. Pegar la cadena de conexión de MongoDB Atlas. (mongodb+srv://reader:reader@cluster0.0zlfvw1.mongodb.net/?appName=Cluster0)
+4. Haz clic en Connect.
+
+endpoints del API
+
+- GET http://localhost:5000/api/tasks
+- POST http://localhost:5000/api/tasks
+- PUT http://localhost:5000/api/tasks/:id
+- DELETE http://localhost:5000/api/tasks/:id
+
+---
+
+### Pruebas
+
+El proyecto incluye pruebas unitarias utilizando Jest.
+
+Para ejecutarlas:
+
+cd backend
+npm test
 
 ---
 
 ## Estado del Proyecto
 
-En desarrollo.
+Proyecto finalizado y desplegado en entorno de producción.
+
+---
+
+## Autor
+
+Manuel Antonio Garcia Juárez
