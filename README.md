@@ -215,18 +215,18 @@ Pasos básicos:
 3. Pegar la cadena de conexión de MongoDB. (mongodb://localhost:27018/)
 4. Haz clic en Connect.
 
-### Cómo ver la base de datos del proyecto en MongoDB Atlas
-1. Abrir MongoDB Compass.
-2. Seleccionar New Connection.
-3. Pegar la cadena de conexión de MongoDB Atlas. (mongodb+srv://reader:reader@cluster0.0zlfvw1.mongodb.net/?appName=Cluster0)
-4. Haz clic en Connect.
-
 endpoints del API
 
 - GET http://localhost:5000/api/tasks
 - POST http://localhost:5000/api/tasks
 - PUT http://localhost:5000/api/tasks/:id
 - DELETE http://localhost:5000/api/tasks/:id
+
+### Cómo ver la base de datos del proyecto en MongoDB Atlas
+1. Abrir MongoDB Compass.
+2. Seleccionar New Connection.
+3. Pegar la cadena de conexión de MongoDB Atlas. (mongodb+srv://reader:reader@cluster0.0zlfvw1.mongodb.net/?appName=Cluster0)
+4. Haz clic en Connect.
 
 ---
 
