@@ -48,6 +48,9 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'django_filters',
+
+    'apps.users',
+    'apps.tasks',
 ]
 
 MIDDLEWARE = [
@@ -144,3 +147,5 @@ MAILERS = {
 
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+AUTH_USER_MODEL = "users.User"
