@@ -2,6 +2,11 @@ from django.utils import timezone
 from rest_framework import viewsets, permissions, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+
+from apps.tasks.filters import TaskFilterSet
+from apps.tasks.pagination import TaskPagination
 
 from apps.tasks.models import Task
 from apps.tasks.serializers import (
@@ -19,21 +24,40 @@ class TaskViewSet(viewsets.ModelViewSet):
 
     Todas las operaciones están aisladas al usuario autenticado
     mediante request.user. No existe PUT. DELETE realiza soft delete
-    en lugar de eliminación física.
+    en lugar de eliminación física. Filtrado, búsqueda y ordenamiento
+    solo se aplican en `list`; las acciones de detalle no deben verse
+    afectadas por parámetros de query incidentales.
     """
 
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_class = TaskFilterSet
+    search_fields = ["title"]
+    ordering_fields = ["created_at", "title", "position"]
+    ordering = ["position", "created_at"]
+    pagination_class = TaskPagination
 
     def get_queryset(self):
         queryset = Task.objects.filter(user=self.request.user)
 
         if self.action == "restore":
-            # restore necesita poder encontrar tareas activas (para
-            # responder 409) y eliminadas (para restaurarlas).
+            return queryset
+
+        if self.action == "list":
+            if "deleted" not in self.request.query_params:
+                return queryset.filter(is_deleted=False)
             return queryset
 
         return queryset.filter(is_deleted=False)
+
+    def filter_queryset(self, queryset):
+        # Filtrado, búsqueda y ordenamiento solo tienen sentido en el
+        # listado. Aplicarlos también en acciones de detalle podría
+        # excluir incidentalmente el objeto buscado por get_object().
+        if self.action == "list":
+            return super().filter_queryset(queryset)
+        return queryset
 
     def get_serializer_class(self):
         if self.action == "create":
