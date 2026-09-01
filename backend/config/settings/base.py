@@ -48,6 +48,7 @@ INSTALLED_APPS = [
 
     'rest_framework',
     'django_filters',
+    'drf_spectacular',
 
     'apps.users',
     'apps.tasks',
@@ -149,6 +150,14 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+}
+
+SPECTACULAR_SETTINGS = {
+    "TITLE": "ToDo List API",
+    "DESCRIPTION": "API para gestión de tareas",
+    "VERSION": "1.0.0",
+    "COMPONENT_SPLIT_REQUEST": True,
 }
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'

@@ -17,6 +17,8 @@ from apps.tasks.serializers import (
 )
 from apps.tasks.services import reorder_tasks
 
+from drf_spectacular.utils import extend_schema
+
 
 class TaskViewSet(viewsets.ModelViewSet):
     """
@@ -28,7 +30,7 @@ class TaskViewSet(viewsets.ModelViewSet):
     solo se aplican en `list`; las acciones de detalle no deben verse
     afectadas por parámetros de query incidentales.
     """
-
+    queryset = Task.objects.none()
     permission_classes = [permissions.IsAuthenticated]
     http_method_names = ["get", "post", "patch", "delete", "head", "options"]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -39,6 +41,9 @@ class TaskViewSet(viewsets.ModelViewSet):
     pagination_class = TaskPagination
 
     def get_queryset(self):
+        if getattr(self, "swagger_fake_view", False):
+            return Task.objects.none()
+
         queryset = Task.objects.filter(user=self.request.user)
 
         if self.action == "restore":
@@ -79,6 +84,7 @@ class TaskViewSet(viewsets.ModelViewSet):
 
         serializer.save(user=self.request.user, position=next_position)
 
+    @extend_schema(responses=TaskSerializer)
     def create(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -111,6 +117,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         instance.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
         return Response(status=status.HTTP_204_NO_CONTENT)
 
+    @extend_schema(request=None, responses=TaskSerializer)
     @action(detail=True, methods=["post"])
     def restore(self, request, pk=None):
         task = self.get_object()
@@ -125,6 +132,7 @@ class TaskViewSet(viewsets.ModelViewSet):
         serializer = TaskSerializer(task)
         return Response(serializer.data, status=status.HTTP_200_OK)
 
+    @extend_schema(responses={200: None})
     @action(detail=False, methods=["post"])
     def reorder(self, request):
         serializer = self.get_serializer(data=request.data)
