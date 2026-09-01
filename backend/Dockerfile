@@ -1,13 +1,15 @@
-FROM node:18
+FROM python:3.13-slim
 
 WORKDIR /app
 
-COPY package*.json ./
-
-RUN npm install
+COPY requirements/ requirements/
+RUN pip install --no-cache-dir -r requirements/prod.txt
 
 COPY . .
 
-EXPOSE 5000
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-CMD ["npm", "run", "dev"]
+EXPOSE 8000
+
+ENTRYPOINT ["/entrypoint.sh"]
