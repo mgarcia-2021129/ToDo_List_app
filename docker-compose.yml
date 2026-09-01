@@ -1,31 +1,37 @@
 version: '3.8'
 
 services:
-  mongo:
-    image: mongo:7
-    container_name: task_mongo
-    ports:
-      - "27018:27017"
-    volumes:
-      - mongo_data:/data/db
-
-  backend:
-    build: ./backend
-    container_name: task_backend
-    ports:
-      - "5000:5000"
+  postgres:
+    image: postgres:17
+    container_name: task_postgres
     env_file:
       - ./backend/.env
-    depends_on:
-      - mongo
-  
-  frontend:
-    build: ./frontend
-    container_name: task_frontend
     ports:
-      - "5173:5173"
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+    container_name: task_backend
+    env_file:
+      - ./backend/.env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
     depends_on:
-      - backend
+      postgres:
+        condition: service_healthy
 
 volumes:
-  mongo_data:
+  postgres_data:
