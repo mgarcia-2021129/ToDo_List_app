@@ -2,6 +2,7 @@ Django
 djangorestframework
 djangorestframework-simplejwt
 django-filter
+django-cors-headers
 psycopg[binary]
 python-dotenv
 drf-spectacular

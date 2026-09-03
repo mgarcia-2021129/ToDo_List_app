@@ -2,11 +2,23 @@ import { useTasks } from "./hooks/useTasks";
 import TaskItem from "./components/TaskItem";
 import { useState } from "react";
 import TaskModal from "./components/TaskModal";
+import { useAuth } from "./hooks/useAuth";
+import AuthPage from "./components/AuthPage";
 
 function App() {
+  const { isAuthenticated } = useAuth();
+
+  // Se monta TodoApp solo cuando hay sesión: así useTasks() (y su fetch
+  // inicial) no se ejecuta mientras el usuario no está autenticado.
+  return isAuthenticated ? <TodoApp /> : <AuthPage />;
+}
+
+function TodoApp() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [filter, setFilter] = useState("ALL");
+
+  const { logout } = useAuth();
 
   const {
     tasks,
@@ -43,6 +55,10 @@ function App() {
             <option value="COMPLETE">Complete</option>
             <option value="INCOMPLETE">Incomplete</option>
           </select>
+
+          <button className="secondary-btn" onClick={logout}>
+            Cerrar sesión
+          </button>
         </div>
 
         <div className="task-wrapper">
