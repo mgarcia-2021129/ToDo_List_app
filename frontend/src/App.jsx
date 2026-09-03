@@ -54,7 +54,7 @@ function App() {
             ) : (
               filteredTasks.map(task => (
                 <TaskItem
-                  key={task._id}
+                  key={task.id}
                   task={task}
                   onDelete={deleteTask}
                   onToggle={toggleStatus}
@@ -71,11 +71,11 @@ function App() {
 
       {isOpen && (
         <TaskModal
-          key={editingTask?._id || "new"}
+          key={editingTask?.id || "new"}
           onClose={() => setIsOpen(false)}
           onSave={async (data) => {
               if (editingTask) {
-                  await updateTask(editingTask._id, data);
+                  await updateTask(editingTask.id, data);
               } else {
                   await addTask(data);
               }

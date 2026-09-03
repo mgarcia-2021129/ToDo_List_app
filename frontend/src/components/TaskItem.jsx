@@ -16,12 +16,12 @@ const TaskItem = ({ task, onDelete, onToggle, onEdit }) => {
             {task.title}
             </p>
             <p className="task-date">
-                {new Date(task.createdAt).toLocaleTimeString("en-US", {
+                {new Date(task.created_at).toLocaleTimeString("en-US", {
                     hour: "2-digit",
                     minute: "2-digit",
                     hour12: true
                 })},{" "}
-                {new Date(task.createdAt).toLocaleDateString("en-US", {
+                {new Date(task.created_at).toLocaleDateString("en-US", {
                     month: "2-digit",
                     day: "2-digit",
                     year: "numeric"
@@ -37,7 +37,7 @@ const TaskItem = ({ task, onDelete, onToggle, onEdit }) => {
 
             <div
             className="square-box"
-            onClick={() => onDelete(task._id)}
+            onClick={() => onDelete(task.id)}
             >
             <Trash size={16} color="#555" />
             </div>

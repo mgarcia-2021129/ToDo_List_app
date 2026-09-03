@@ -32,7 +32,7 @@ export const useTasks = () => {
 
         setTasks(prev =>
         prev.map(task =>
-            task._id === id ? updated : task
+            task.id === id ? updated : task
         )
         );
     };
@@ -40,19 +40,23 @@ export const useTasks = () => {
     const deleteTask = async (id) => {
         await deleteTaskApi(id);
         setTasks(prev =>
-        prev.filter(task => task._id !== id)
+        prev.filter(task => task.id !== id)
         );
     };
 
     const toggleStatus = async (task) => {
-        const updated = await updateTaskApi(task._id, {
-        ...task,
+        // El backend solo acepta PATCH parcial (title?, completed?), no el
+        // objeto completo. Enviar campos de solo-lectura como `id`,
+        // `position`, `is_deleted`, etc. no rompe la petición (el serializer
+        // de update los ignora), pero no corresponde al contrato: se envía
+        // únicamente el campo que realmente cambia.
+        const updated = await updateTaskApi(task.id, {
         completed: !task.completed
         });
 
         setTasks(prev =>
         prev.map(t =>
-            t._id === task._id ? updated : t
+            t.id === task.id ? updated : t
         )
         );
     };
