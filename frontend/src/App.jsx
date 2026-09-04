@@ -175,12 +175,10 @@ function TodoApp() {
                 <div className="empty-state">
                   <p>Cargando tareas...</p>
                 </div>
-              ) : tasks.length === 0 ? (
-                !error && (
-                  <div className="empty-state">
-                    <p>{hasActiveQuery ? "No hay tareas que coincidan con el filtro." : "No Todo Found"}</p>
-                  </div>
-                )
+              ) : error ? null : tasks.length === 0 ? (
+                <div className="empty-state">
+                  <p>{hasActiveQuery ? "No hay tareas que coincidan con el filtro." : "No Todo Found"}</p>
+                </div>
               ) : (
                 tasks.map((task, index) => (
                   <TaskItem
@@ -244,12 +242,10 @@ function TodoApp() {
                 <div className="empty-state">
                   <p>Cargando papelera...</p>
                 </div>
-              ) : trashTasks.length === 0 ? (
-                !trashError && (
-                  <div className="empty-state">
-                    <p>La papelera está vacía.</p>
-                  </div>
-                )
+              ) : trashError ? null : trashTasks.length === 0 ? (
+                <div className="empty-state">
+                  <p>La papelera está vacía.</p>
+                </div>
               ) : (
                 trashTasks.map((task) => (
                   <TrashItem key={task.id} task={task} onRestore={restoreTask} />

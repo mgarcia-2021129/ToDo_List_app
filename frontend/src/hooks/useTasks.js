@@ -209,8 +209,12 @@ export const useTasks = () => {
             // correcta, igual que ya se hace en addTask/updateTask/toggleStatus.
             await loadTasks();
         } catch (err) {
+            // No se relanza: nada consume la excepción (TaskItem llama
+            // onDelete(task.id) directamente, sin await/catch), así que un
+            // throw aquí solo generaría un "unhandled promise rejection" en
+            // consola sin aportar nada — el error ya queda visible vía
+            // setError + el banner existente (igual que toggleStatus, 6.7).
             setError(extractErrorMessage(err, "No se pudo eliminar la tarea."));
-            throw err;
         }
     };
 
@@ -254,8 +258,11 @@ export const useTasks = () => {
             await loadTasks();
             setTrashError(null);
         } catch (err) {
+            // No se relanza: TrashItem llama onRestore(task.id) directamente
+            // sin await/catch. El error queda visible vía trashError + el
+            // banner propio de la papelera (independiente del de tareas
+            // activas, ver `error`).
             setTrashError(extractErrorMessage(err, "No se pudo restaurar la tarea."));
-            throw err;
         }
     };
 
@@ -278,8 +285,11 @@ export const useTasks = () => {
             });
             setError(null);
         } catch (err) {
+            // No se relanza: moveTask() no tiene su propio try/catch (solo
+            // hace `await reorderTo(...)`), y quien la invoca (TaskItem, vía
+            // onMoveUp/onMoveDown) tampoco captura la promesa. El error ya
+            // queda visible vía setError + el banner existente.
             setError(extractErrorMessage(err, "No se pudo reordenar las tareas."));
-            throw err;
         }
     };
 
