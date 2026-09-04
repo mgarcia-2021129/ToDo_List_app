@@ -20,11 +20,20 @@ import {
   v1TasksReorderCreate,
 } from "../api/generated/endpoints";
 
-export const getTasks = async () => {
-  const response = await v1TasksList();
+export const getTasks = async ({ completed, search, ordering } = {}) => {
+  // Se arma el objeto de params a mano (en vez de pasar {completed, search,
+  // ordering} tal cual) para no enviar claves con valor undefined/"" a
+  // Django: `search=` u `ordering=` vacíos son válidos para DRF, pero no
+  // aportan nada y ensucian la URL/el log de peticiones.
+  const params = {};
+  if (completed !== undefined) params.completed = completed;
+  if (search) params.search = search;
+  if (ordering) params.ordering = ordering;
+
+  const response = await v1TasksList(params);
   // El backend pagina el listado. Por ahora se consume solo la primera
-  // página (`results`); no se implementa aún UI de paginación (fuera de
-  // alcance de esta fase).
+  // página (`results`); la navegación de páginas es 6.6, fuera de alcance
+  // de esta fase.
   return response.data.results;
 };
 

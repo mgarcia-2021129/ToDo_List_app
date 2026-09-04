@@ -17,7 +17,6 @@ function App() {
 function TodoApp() {
   const [isOpen, setIsOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [filter, setFilter] = useState("ALL");
   const [view, setView] = useState("ACTIVE"); // "ACTIVE" | "TRASH"
 
   const { logout } = useAuth();
@@ -27,6 +26,12 @@ function TodoApp() {
     loading,
     error,
     retryLoadTasks,
+    completedFilter,
+    setCompletedFilter,
+    searchInput,
+    setSearch,
+    ordering,
+    setOrdering,
     trashTasks,
     trashLoading,
     trashError,
@@ -48,17 +53,30 @@ function TodoApp() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view]);
 
-  const filteredTasks = tasks.filter(task => {
-    if (filter === "COMPLETE") return task.completed;
-    if (filter === "INCOMPLETE") return !task.completed;
-    return true;
-  });
+  // Valor mostrado en el <select> de estado, derivado de completedFilter
+  // (undefined | true | false) tal como lo maneja el hook.
+  const statusFilterValue =
+    completedFilter === undefined ? "ALL" : completedFilter ? "COMPLETE" : "INCOMPLETE";
+
+  const handleStatusFilterChange = (value) => {
+    if (value === "ALL") setCompletedFilter(undefined);
+    else setCompletedFilter(value === "COMPLETE");
+  };
+
+  // `tasks` ya viene filtrada/buscada/ordenada por el backend (6.5): no se
+  // vuelve a filtrar en el cliente.
+  const hasActiveQuery = completedFilter !== undefined || searchInput.trim() !== "";
 
   // El backend exige que /tasks/reorder/ reciba el conjunto COMPLETO de
-  // tareas activas del usuario (apps/tasks/services.py). Si hay un filtro
-  // aplicado, la lista visible es un subconjunto, así que reordenar dejaría
-  // de tener sentido (o de ser válido) hasta volver a "ALL".
-  const canReorder = filter === "ALL";
+  // tareas activas del usuario, en el orden natural (posición), ya que
+  // services.py valida que sea exactamente ese conjunto. Si hay un filtro
+  // de estado, una búsqueda, o un ordering distinto al de posición
+  // aplicados, `tasks` es un subconjunto o un orden distinto del real, así
+  // que reordenar dejaría de ser válido hasta volver a la vista sin filtros.
+  const canReorder =
+    completedFilter === undefined &&
+    searchInput.trim() === "" &&
+    (ordering === "" || ordering === "position");
 
   const handleSave = async (data) => {
     try {
@@ -93,10 +111,27 @@ function TodoApp() {
                 Add Task
               </button>
 
-              <select value={filter} onChange={(e) => setFilter(e.target.value)}>
+              <input
+                type="text"
+                className="search-input"
+                placeholder="Buscar por título..."
+                value={searchInput}
+                onChange={(e) => setSearch(e.target.value)}
+              />
+
+              <select
+                value={statusFilterValue}
+                onChange={(e) => handleStatusFilterChange(e.target.value)}
+              >
                 <option value="ALL">ALL</option>
                 <option value="COMPLETE">Complete</option>
                 <option value="INCOMPLETE">Incomplete</option>
+              </select>
+
+              <select value={ordering} onChange={(e) => setOrdering(e.target.value)}>
+                <option value="">Orden manual (posición)</option>
+                <option value="-created_at">Más recientes primero</option>
+                <option value="created_at">Más antiguas primero</option>
               </select>
 
               <button className="secondary-btn" onClick={() => setView("TRASH")}>
@@ -133,15 +168,11 @@ function TodoApp() {
               ) : tasks.length === 0 ? (
                 !error && (
                   <div className="empty-state">
-                    <p>No Todo Found</p>
+                    <p>{hasActiveQuery ? "No hay tareas que coincidan con el filtro." : "No Todo Found"}</p>
                   </div>
                 )
-              ) : filteredTasks.length === 0 ? (
-                <div className="empty-state">
-                  <p>No hay tareas que coincidan con el filtro.</p>
-                </div>
               ) : (
-                filteredTasks.map((task, index) => (
+                tasks.map((task, index) => (
                   <TaskItem
                     key={task.id}
                     task={task}
@@ -153,7 +184,7 @@ function TodoApp() {
                     }}
                     canReorder={canReorder}
                     canMoveUp={index > 0}
-                    canMoveDown={index < filteredTasks.length - 1}
+                    canMoveDown={index < tasks.length - 1}
                     onMoveUp={(id) => moveTask(id, "up")}
                     onMoveDown={(id) => moveTask(id, "down")}
                   />

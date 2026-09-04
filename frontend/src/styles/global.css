@@ -91,6 +91,23 @@ select {
     width: 140px;
 }
 
+.search-input {
+    height: 38px;
+    padding: 0 14px;
+    border-radius: 8px;
+    border: 1px solid var(--color-border);
+    background: var(--color-card);
+    font-size: 14px;
+    color: #222;
+    outline: none;
+    flex: 1;
+    min-width: 120px;
+}
+
+.search-input:focus {
+    border-color: var(--color-primary);
+}
+
 /* Responsive */
 
 @media (max-width: 600px) {
