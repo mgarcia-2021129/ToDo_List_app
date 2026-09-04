@@ -1,6 +1,16 @@
-import { Pencil, Trash } from "lucide-react";
+import { Pencil, Trash, ChevronUp, ChevronDown } from "lucide-react";
 
-const TaskItem = ({ task, onDelete, onToggle, onEdit }) => {
+const TaskItem = ({
+    task,
+    onDelete,
+    onToggle,
+    onEdit,
+    canReorder = false,
+    canMoveUp = false,
+    canMoveDown = false,
+    onMoveUp,
+    onMoveDown,
+}) => {
     return (
         <div className="task-item">
         <div className="task-left">
@@ -31,6 +41,29 @@ const TaskItem = ({ task, onDelete, onToggle, onEdit }) => {
         </div>
         
         <div className="task-actions">
+            {canReorder && (
+                <>
+                    <button
+                        type="button"
+                        className="square-box move-btn"
+                        onClick={() => onMoveUp(task.id)}
+                        disabled={!canMoveUp}
+                        title="Mover arriba"
+                    >
+                        <ChevronUp size={16} color="#555" />
+                    </button>
+                    <button
+                        type="button"
+                        className="square-box move-btn"
+                        onClick={() => onMoveDown(task.id)}
+                        disabled={!canMoveDown}
+                        title="Mover abajo"
+                    >
+                        <ChevronDown size={16} color="#555" />
+                    </button>
+                </>
+            )}
+
             <div className="square-box" onClick={() => onEdit(task)}>
             <Pencil size={16} color="#555" />
             </div>

@@ -16,6 +16,8 @@ import {
   v1TasksCreate,
   v1TasksPartialUpdate,
   v1TasksDestroy,
+  v1TasksRestoreCreate,
+  v1TasksReorderCreate,
 } from "../api/generated/endpoints";
 
 export const getTasks = async () => {
@@ -23,6 +25,14 @@ export const getTasks = async () => {
   // El backend pagina el listado. Por ahora se consume solo la primera
   // página (`results`); no se implementa aún UI de paginación (fuera de
   // alcance de esta fase).
+  return response.data.results;
+};
+
+export const getDeletedTasks = async () => {
+  // `deleted=true` es el alias público de `is_deleted` que expone
+  // TaskFilterSet en el backend (apps/tasks/filters.py). Igual que en
+  // getTasks(), solo se consume la primera página.
+  const response = await v1TasksList({ deleted: true });
   return response.data.results;
 };
 
@@ -40,8 +50,22 @@ export const updateTask = async (id, data) => {
 
 export const deleteTask = async (id) => {
   // Nota: en Django esto es un soft delete (is_deleted=true), no una
-  // eliminación física. El frontend actual lo sigue tratando como si
-  // desapareciera de la lista, que es el comportamiento visible correcto
-  // para esta fase. La UI de restauración queda fuera de alcance de 6.1.
+  // eliminación física. El frontend lo trata como si desapareciera de la
+  // lista activa; la UI de papelera/restauración (6.4) consume la tarea
+  // por separado mediante getDeletedTasks().
   await v1TasksDestroy(id);
+};
+
+export const restoreTask = async (id) => {
+  const response = await v1TasksRestoreCreate(id);
+  return response.data;
+};
+
+export const reorderTasks = async (taskIds) => {
+  // El backend (apps/tasks/services.py) exige el conjunto COMPLETO de IDs
+  // de tareas activas del usuario, cada uno una única vez. La posición
+  // final de cada tarea es su índice dentro de `taskIds`. No devuelve las
+  // tareas reordenadas (200 sin cuerpo): el orden se refleja en el
+  // frontend a partir del propio `taskIds` que se acaba de aceptar.
+  await v1TasksReorderCreate({ task_ids: taskIds });
 };

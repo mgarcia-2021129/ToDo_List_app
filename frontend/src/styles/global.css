@@ -346,3 +346,40 @@ select {
 .modal {
     animation: modalPop 0.4s ease;
 }
+
+/* 6.4 - Loading / Error / Retry */
+
+.error-banner {
+    background: #fbdede;
+    color: #8a2a2a;
+    border-radius: 8px;
+    padding: 10px 16px;
+    margin-bottom: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    font-weight: 500;
+}
+
+.error-banner .secondary-btn {
+    padding: 6px 14px;
+    white-space: nowrap;
+}
+
+/* 6.4 - Reordenamiento */
+
+button.move-btn {
+    border: none;
+}
+
+button.move-btn:disabled {
+    opacity: 0.3;
+    cursor: default;
+}
+
+/* 6.4 - Papelera */
+
+.trash-item .task-title {
+    text-decoration: line-through;
+}
