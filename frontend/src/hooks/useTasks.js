@@ -100,8 +100,15 @@ export const useTasks = () => {
         page,
     };
 
-    const loadTasks = async (params = currentParams) => {
-        setLoading(true);
+    // `silent`: usado por toggleStatus (6.9) para revalidar tras un PATCH ya
+    // exitoso cuando la tarea sale de la vista actual. En ese caso no debe
+    // pisarse la lista optimista con "Cargando tareas..." (no toca
+    // `loading`), y un fallo de esta revalidación no debe mostrarse como
+    // error ni provocar rollback: la mutación principal ya tuvo éxito, así
+    // que este GET es best-effort (ver excepción de la página inválida más
+    // abajo, que sí debe seguir aplicando igual en modo silencioso).
+    const loadTasks = async (params = currentParams, { silent = false } = {}) => {
+        if (!silent) setLoading(true);
         setError(null);
         try {
             const data = await getTasks(params);
@@ -123,6 +130,9 @@ export const useTasks = () => {
             // efecto de [completedFilter, debouncedSearch, ordering, page]
             // dispare el refetch normal ahí, conservando el resto de los
             // parámetros vigentes (no se tocan completed/search/ordering).
+            // Esto aplica igual en modo silencioso: la página inválida debe
+            // corregirse sí o sí para que la lista vuelva a sincronizarse,
+            // sin importar si el llamador pidió una revalidación silenciosa.
             //
             // Esto no puede volverse un loop infinito: cada vez que entra a
             // esta rama la página baja en 1, así que en el peor caso llega a
@@ -134,9 +144,17 @@ export const useTasks = () => {
                 setPage(requestedPage - 1);
                 return;
             }
-            setError(extractErrorMessage(err, "No se pudieron cargar las tareas."));
+            // En modo silencioso, cualquier otro fallo de esta revalidación
+            // (red, 5xx, etc.) se ignora a propósito: no hay setError ni
+            // rollback, porque el PATCH que la disparó ya tuvo éxito. La UI
+            // optimista se mantiene tal cual quedó; en el peor caso
+            // count/next/previous quedan desactualizados hasta la próxima
+            // carga real.
+            if (!silent) {
+                setError(extractErrorMessage(err, "No se pudieron cargar las tareas."));
+            }
         } finally {
-            setLoading(false);
+            if (!silent) setLoading(false);
         }
     };
 
@@ -239,6 +257,17 @@ export const useTasks = () => {
         try {
             await updateTaskApi(task.id, { completed: newCompleted });
             setError(null);
+            // 6.9: el PATCH ya tuvo éxito. Si la tarea salió de la vista
+            // actual, el cliente no puede saber desde aquí cuál es el
+            // count/next/previous reales (depende de cuántas tareas activas
+            // quedan y de paginación en el backend), así que se revalida en
+            // silencio la consulta vigente reutilizando loadTasks() — sin
+            // ruta HTTP paralela y sin mostrar "Cargando tareas...". Si esta
+            // revalidación falla, se ignora (ver comentario en loadTasks):
+            // no hay rollback porque la mutación principal sí tuvo éxito.
+            if (!staysInCurrentView) {
+                await loadTasks(currentParams, { silent: true });
+            }
         } catch (err) {
             setTasks(previousTasks);
             setCount(previousCount);
