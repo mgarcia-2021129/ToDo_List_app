@@ -32,6 +32,12 @@ function TodoApp() {
     setSearch,
     ordering,
     setOrdering,
+    page,
+    count,
+    next,
+    previous,
+    goToNextPage,
+    goToPreviousPage,
     trashTasks,
     trashLoading,
     trashError,
@@ -70,13 +76,17 @@ function TodoApp() {
   // El backend exige que /tasks/reorder/ reciba el conjunto COMPLETO de
   // tareas activas del usuario, en el orden natural (posición), ya que
   // services.py valida que sea exactamente ese conjunto. Si hay un filtro
-  // de estado, una búsqueda, o un ordering distinto al de posición
-  // aplicados, `tasks` es un subconjunto o un orden distinto del real, así
-  // que reordenar dejaría de ser válido hasta volver a la vista sin filtros.
+  // de estado, una búsqueda, un ordering distinto al de posición, o más de
+  // una página de resultados (6.6: `tasks` deja de ser el total apenas
+  // `next`/`previous` indican que hay otra página), `tasks` es un
+  // subconjunto o un orden distinto del real, así que reordenar dejaría de
+  // ser válido hasta volver a la vista sin filtros y en una sola página.
   const canReorder =
     completedFilter === undefined &&
     searchInput.trim() === "" &&
-    (ordering === "" || ordering === "position");
+    (ordering === "" || ordering === "position") &&
+    !next &&
+    !previous;
 
   const handleSave = async (data) => {
     try {
@@ -191,6 +201,32 @@ function TodoApp() {
                 ))
               )}
             </div>
+
+            {!error && (
+              <div className="pagination">
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={goToPreviousPage}
+                  disabled={loading || !previous}
+                >
+                  ← Anterior
+                </button>
+
+                <span className="pagination-info">
+                  Página {page}{count > 0 ? ` · ${count} tarea${count === 1 ? "" : "s"}` : ""}
+                </span>
+
+                <button
+                  type="button"
+                  className="secondary-btn"
+                  onClick={goToNextPage}
+                  disabled={loading || !next}
+                >
+                  Siguiente →
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="task-wrapper">

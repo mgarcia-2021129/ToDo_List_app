@@ -108,6 +108,29 @@ select {
     border-color: var(--color-primary);
 }
 
+/* Pagination (6.6) */
+
+.pagination {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+    margin-top: 15px;
+}
+
+.pagination-info {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    text-align: center;
+    flex: 1;
+}
+
+button.secondary-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
 /* Responsive */
 
 @media (max-width: 600px) {

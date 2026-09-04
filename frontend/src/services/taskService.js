@@ -20,21 +20,25 @@ import {
   v1TasksReorderCreate,
 } from "../api/generated/endpoints";
 
-export const getTasks = async ({ completed, search, ordering } = {}) => {
+export const getTasks = async ({ completed, search, ordering, page } = {}) => {
   // Se arma el objeto de params a mano (en vez de pasar {completed, search,
-  // ordering} tal cual) para no enviar claves con valor undefined/"" a
-  // Django: `search=` u `ordering=` vacíos son válidos para DRF, pero no
+  // ordering, page} tal cual) para no enviar claves con valor undefined/""
+  // a Django: `search=` u `ordering=` vacíos son válidos para DRF, pero no
   // aportan nada y ensucian la URL/el log de peticiones.
   const params = {};
   if (completed !== undefined) params.completed = completed;
   if (search) params.search = search;
   if (ordering) params.ordering = ordering;
+  if (page) params.page = page;
 
   const response = await v1TasksList(params);
-  // El backend pagina el listado. Por ahora se consume solo la primera
-  // página (`results`); la navegación de páginas es 6.6, fuera de alcance
-  // de esta fase.
-  return response.data.results;
+  // 6.6: a diferencia de getTasks() antes de esta fase, ya no se descarta
+  // el resto del sobre paginado. `count`/`next`/`previous` los necesita
+  // useTasks para pintar los controles de paginación; `page_size` no se
+  // expone porque el frontend no lo está eligiendo (se usa el default del
+  // backend).
+  const { count, next, previous, results } = response.data;
+  return { count, next, previous, results };
 };
 
 export const getDeletedTasks = async () => {

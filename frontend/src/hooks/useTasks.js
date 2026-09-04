@@ -37,18 +37,45 @@ const SEARCH_DEBOUNCE_MS = 400;
 
 export const useTasks = () => {
     // --- Query server-side: completed / search / ordering ---
-    // `completedFilter`: undefined (ALL) | true (COMPLETE) | false (INCOMPLETE)
-    const [completedFilter, setCompletedFilter] = useState(undefined);
+    // `completedFilterState`: undefined (ALL) | true (COMPLETE) | false (INCOMPLETE)
+    const [completedFilter, setCompletedFilterState] = useState(undefined);
     // Valor tal cual lo tipea el usuario (input controlado, sin debounce).
     const [searchInput, setSearchInput] = useState("");
     // Valor que realmente se envía al backend, con debounce aplicado.
     const [debouncedSearch, setDebouncedSearch] = useState("");
     // "" (default del backend: position, created_at) | "-created_at" | "created_at" | "position"
-    const [ordering, setOrdering] = useState("");
+    const [ordering, setOrderingState] = useState("");
+
+    // --- Paginación (6.6) ---
+    const [page, setPage] = useState(1);
+    const [count, setCount] = useState(0);
+    const [next, setNext] = useState(null);
+    const [previous, setPrevious] = useState(null);
+
+    // Cambiar de filtro/ordering es un evento síncrono (onChange de un
+    // <select>): React agrupa (batch) el setState del propio parámetro y el
+    // setPage(1) dentro del mismo render, así el efecto de fetch de abajo
+    // los ve ya actualizados juntos y dispara una sola petición con
+    // page=1 en vez de una con la página vieja y otra inmediatamente
+    // después con page=1.
+    const setCompletedFilter = (value) => {
+        setCompletedFilterState(value);
+        setPage(1);
+    };
+
+    const setOrdering = (value) => {
+        setOrderingState(value);
+        setPage(1);
+    };
 
     useEffect(() => {
         const handle = setTimeout(() => {
+            // El reset de página va adentro del propio timeout (junto con
+            // setDebouncedSearch) por la misma razón que en setOrdering:
+            // que ambos cambios de estado lleguen juntos al efecto de
+            // fetch, no en dos renders separados.
             setDebouncedSearch(searchInput);
+            setPage(1);
         }, SEARCH_DEBOUNCE_MS);
         return () => clearTimeout(handle);
     }, [searchInput]);
@@ -63,13 +90,14 @@ export const useTasks = () => {
     const [trashLoading, setTrashLoading] = useState(false);
     const [trashError, setTrashError] = useState(null);
 
-    // Los tres parámetros de consulta soportados por 6.5, combinables entre
-    // sí (completar uno no borra los demás porque viven en estados
+    // Los cuatro parámetros de consulta soportados hasta 6.6, combinables
+    // entre sí (cambiar uno no borra los demás porque viven en estados
     // independientes, no en un único objeto que se sobreescribe entero).
     const currentParams = {
         completed: completedFilter,
         search: debouncedSearch,
         ordering,
+        page,
     };
 
     const loadTasks = async (params = currentParams) => {
@@ -77,23 +105,50 @@ export const useTasks = () => {
         setError(null);
         try {
             const data = await getTasks(params);
-            setTasks(data);
+            setTasks(data.results);
+            setCount(data.count);
+            setNext(data.next);
+            setPrevious(data.previous);
         } catch (err) {
+            const requestedPage = params.page ?? 1;
+            // DRF (PageNumberPagination) responde 404 con {"detail": "Invalid
+            // page."} cuando se pide una página que ya no existe. Esto puede
+            // pasar legítimamente aunque el usuario no haya tocado la
+            // paginación: p.ej. está en la página 2 y borra la última tarea
+            // visible ahí, con lo cual la página 2 deja de existir en el
+            // momento en que se vuelve a pedir tras el delete.
+            //
+            // En vez de mostrar ese error, si todavía queda una página
+            // anterior (requestedPage > 1) se retrocede una y se deja que el
+            // efecto de [completedFilter, debouncedSearch, ordering, page]
+            // dispare el refetch normal ahí, conservando el resto de los
+            // parámetros vigentes (no se tocan completed/search/ordering).
+            //
+            // Esto no puede volverse un loop infinito: cada vez que entra a
+            // esta rama la página baja en 1, así que en el peor caso llega a
+            // page=1; y page=1 nunca devuelve 404 (si no hay resultados,
+            // DRF responde 200 con results: [] en vez de fallar), por lo que
+            // la cadena de reintentos siempre termina en, como mucho,
+            // `requestedPage - 1` pasos.
+            if (err?.response?.status === 404 && requestedPage > 1) {
+                setPage(requestedPage - 1);
+                return;
+            }
             setError(extractErrorMessage(err, "No se pudieron cargar las tareas."));
         } finally {
             setLoading(false);
         }
     };
 
-    // Vuelve a pedir el listado cada vez que cambia cualquiera de los tres
-    // parámetros de consulta (filtro de estado, búsqueda debounced u
-    // ordering). Reemplaza el filtrado local (`tasks.filter(...)`) que
-    // existía antes de 6.5: ahora Django ya devuelve solo lo que
+    // Vuelve a pedir el listado cada vez que cambia cualquiera de los
+    // cuatro parámetros de consulta (filtro de estado, búsqueda debounced,
+    // ordering o página). Reemplaza el filtrado local (`tasks.filter(...)`)
+    // que existía antes de 6.5: ahora Django ya devuelve solo lo que
     // corresponde a la combinación actual de parámetros.
     useEffect(() => {
-        loadTasks({ completed: completedFilter, search: debouncedSearch, ordering });
+        loadTasks({ completed: completedFilter, search: debouncedSearch, ordering, page });
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [completedFilter, debouncedSearch, ordering]);
+    }, [completedFilter, debouncedSearch, ordering, page]);
 
     const loadTrash = async () => {
         setTrashLoading(true);
@@ -143,11 +198,16 @@ export const useTasks = () => {
     const deleteTask = async (id) => {
         try {
             await deleteTaskApi(id);
-            // El soft delete saca a la tarea de cualquier consulta de
-            // activas sin excepción, así que quitarla localmente del
-            // array es siempre correcto (no hace falta refetch).
-            setTasks(prev => prev.filter(task => task.id !== id));
             setError(null);
+            // Antes de 6.6 alcanzaba con sacar la tarea del array local
+            // (el soft delete la excluye de cualquier consulta de activas
+            // sin excepción). Pero ahora `count`/`next`/`previous` también
+            // dependen de cuántas tareas activas quedan, y una remoción
+            // puramente local los dejaría desactualizados (p.ej. "next"
+            // seguiría habilitado con una página que ya no existe). Se
+            // refresca la consulta actual para mantener esa información
+            // correcta, igual que ya se hace en addTask/updateTask/toggleStatus.
+            await loadTasks();
         } catch (err) {
             setError(extractErrorMessage(err, "No se pudo eliminar la tarea."));
             throw err;
@@ -196,8 +256,12 @@ export const useTasks = () => {
             // se reconstruye localmente a partir del propio `orderedIds` que
             // el backend acaba de aceptar (services.py ya validó que es
             // exactamente el conjunto completo de tareas activas del
-            // usuario). Esto solo se invoca cuando la vista actual ES ese
-            // conjunto completo sin filtrar (ver `canReorder` en App.jsx).
+            // usuario). Esto solo se invoca cuando `tasks` ES ese conjunto
+            // completo: sin filtro de estado, sin búsqueda, con ordering de
+            // posición, y con una sola página de resultados (ver
+            // `canReorder` en App.jsx, que ahora también exige
+            // `!next && !previous`; con paginación, `tasks` deja de ser el
+            // total de tareas activas en cuanto hay más de una página).
             setTasks(prev => {
                 const byId = new Map(prev.map(task => [task.id, task]));
                 return orderedIds.map(id => byId.get(id)).filter(Boolean);
@@ -210,9 +274,11 @@ export const useTasks = () => {
     };
 
     // Mueve una tarea activa una posición hacia arriba o abajo dentro de
-    // `tasks` (que en este momento contiene el conjunto COMPLETO de tareas
-    // activas del usuario, sin filtrar/buscar/reordenar por otro criterio;
-    // ver `canReorder` en App.jsx) y envía el nuevo orden completo al backend.
+    // `tasks` y envía el nuevo orden completo al backend. Solo tiene
+    // sentido llamarla cuando `tasks` es efectivamente el conjunto
+    // completo de tareas activas del usuario (ver `canReorder` en
+    // App.jsx); con un filtro, búsqueda, ordering distinto de posición, o
+    // más de una página, `tasks` es un subconjunto o un orden parcial.
     const moveTask = async (taskId, direction) => {
         const index = tasks.findIndex(task => task.id === taskId);
         if (index === -1) return;
@@ -229,6 +295,17 @@ export const useTasks = () => {
         await reorderTo(reordered.map(task => task.id));
     };
 
+    // Solo avanzan si el backend efectivamente indicó que hay una página
+    // siguiente/anterior (`next`/`previous`); si no, no hacen nada (el
+    // botón correspondiente además queda deshabilitado en la UI).
+    const goToNextPage = () => {
+        if (next) setPage(p => p + 1);
+    };
+
+    const goToPreviousPage = () => {
+        if (previous) setPage(p => Math.max(1, p - 1));
+    };
+
     return {
         tasks,
         loading,
@@ -242,6 +319,14 @@ export const useTasks = () => {
         setSearch: setSearchInput,
         ordering,
         setOrdering,
+
+        // Paginación (6.6)
+        page,
+        count,
+        next,
+        previous,
+        goToNextPage,
+        goToPreviousPage,
 
         trashTasks,
         trashLoading,
