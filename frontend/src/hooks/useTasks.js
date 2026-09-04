@@ -215,20 +215,30 @@ export const useTasks = () => {
     };
 
     const toggleStatus = async (task) => {
+        const previousTasks = tasks;
+        const previousCount = count;
+
+        const newCompleted = !task.completed;
+        const staysInCurrentView =
+            completedFilter === undefined || completedFilter === newCompleted;
+
+        setTasks(prev =>
+            staysInCurrentView
+                ? prev.map(t => (t.id === task.id ? { ...t, completed: newCompleted } : t))
+                : prev.filter(t => t.id !== task.id)
+        );
+
+        if (!staysInCurrentView) {
+            setCount(c => Math.max(0, c - 1));
+        }
+        
         try {
-            // El backend solo acepta PATCH parcial (title?, completed?): se
-            // envía únicamente el campo que realmente cambia.
-            await updateTaskApi(task.id, {
-                completed: !task.completed,
-            });
+            await updateTaskApi(task.id, { completed: newCompleted });
             setError(null);
-            // Igual que en updateTask: si hay un filtro `completed` activo,
-            // completar/descompletar puede hacer que la tarea deba
-            // desaparecer de la vista actual. Se refresca la consulta.
-            await loadTasks();
         } catch (err) {
+            setTasks(previousTasks);
+            setCount(previousCount);
             setError(extractErrorMessage(err, "No se pudo actualizar el estado de la tarea."));
-            throw err;
         }
     };
 
