@@ -175,7 +175,7 @@ function TodoApp() {
                 <div className="empty-state">
                   <p>Cargando tareas...</p>
                 </div>
-              ) : error ? null : tasks.length === 0 ? (
+              ) : tasks.length === 0 ? (
                 <div className="empty-state">
                   <p>{hasActiveQuery ? "No hay tareas que coincidan con el filtro." : "No Todo Found"}</p>
                 </div>
