@@ -1,7 +1,15 @@
+import { useSelector } from "react-redux";
 import { Pencil, Trash, ChevronUp, ChevronDown } from "lucide-react";
+import { tasksSelectors } from "../store/tasksSlice";
 
+// Único cambio estructural frente a la versión Zustand: en vez de recibir
+// el objeto `task` completo como prop (y depender de que el padre
+// re-renderice con la lista entera), este componente selecciona
+// únicamente SU PROPIA entidad del store. Actualizar otra tarea no debería
+// causar que este componente vuelva a renderizar — es justamente lo que el
+// comparativo del proyecto necesita poder medir.
 const TaskItem = ({
-    task,
+    taskId,
     onDelete,
     onToggle,
     onEdit,
@@ -11,12 +19,20 @@ const TaskItem = ({
     onMoveUp,
     onMoveDown,
 }) => {
+    const task = useSelector((state) => tasksSelectors.selectById(state, taskId));
+
+    // Guarda defensiva: si la tarea deja de existir en el store (p.ej. un
+    // refetch la excluyó) en el breve instante antes de que el padre deje
+    // de renderizar este item, se evita un crash por acceder a
+    // propiedades de `undefined`.
+    if (!task) return null;
+
     return (
         <div className="task-item">
         <div className="task-left">
             <div
             className={`square-box ${task.completed ? "checked" : ""}`}
-            onClick={() => onToggle(task)}
+            onClick={() => onToggle(task.id)}
             >
             ✓
             </div>
