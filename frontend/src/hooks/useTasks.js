@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
     getTasks,
     getDeletedTasks,
@@ -28,36 +29,27 @@ const extractErrorMessage = (err, fallback) => {
 };
 
 // Cuánto esperar tras la última tecla antes de disparar la búsqueda contra
-// el backend. Sin este pequeño debounce, cada carácter tipeado dispararía
-// una petición GET /api/v1/tasks/?search=... independiente (y, por las
-// respuestas asíncronas, podrían llegar desordenadas y pisarse entre sí).
-// 400ms es un valor conservador solo para evitar ese ruido; no es un
-// sistema de cancelación/carrera de peticiones.
+// el backend. Ver el mismo comentario en la versión pre-TanStack: no es un
+// sistema de cancelación/carrera de peticiones, solo evita una petición por
+// carácter tipeado. Se mantiene como estado local + efecto (no como parte de
+// la capa de query) porque `searchInput` en sí es UI pura; lo único que
+// entra a la query key es `debouncedSearch`.
 const SEARCH_DEBOUNCE_MS = 400;
 
 export const useTasks = () => {
-    // --- Query server-side: completed / search / ordering ---
-    // `completedFilterState`: undefined (ALL) | true (COMPLETE) | false (INCOMPLETE)
+    const queryClient = useQueryClient();
+
+    // --- Parámetros de consulta: siguen siendo estado local de React, NO
+    // server state. TanStack Query solo entra a partir de acá: cualquier
+    // cambio en estos valores cambia la query key de abajo, y eso es lo que
+    // dispara el refetch — reemplaza al useEffect con deps manuales que
+    // existía en la versión useState/useEffect. ---
     const [completedFilter, setCompletedFilterState] = useState(undefined);
-    // Valor tal cual lo tipea el usuario (input controlado, sin debounce).
     const [searchInput, setSearchInput] = useState("");
-    // Valor que realmente se envía al backend, con debounce aplicado.
     const [debouncedSearch, setDebouncedSearch] = useState("");
-    // "" (default del backend: position, created_at) | "-created_at" | "created_at" | "position"
     const [ordering, setOrderingState] = useState("");
-
-    // --- Paginación (6.6) ---
     const [page, setPage] = useState(1);
-    const [count, setCount] = useState(0);
-    const [next, setNext] = useState(null);
-    const [previous, setPrevious] = useState(null);
 
-    // Cambiar de filtro/ordering es un evento síncrono (onChange de un
-    // <select>): React agrupa (batch) el setState del propio parámetro y el
-    // setPage(1) dentro del mismo render, así el efecto de fetch de abajo
-    // los ve ya actualizados juntos y dispara una sola petición con
-    // page=1 en vez de una con la página vieja y otra inmediatamente
-    // después con page=1.
     const setCompletedFilter = (value) => {
         setCompletedFilterState(value);
         setPage(1);
@@ -70,298 +62,358 @@ export const useTasks = () => {
 
     useEffect(() => {
         const handle = setTimeout(() => {
-            // El reset de página va adentro del propio timeout (junto con
-            // setDebouncedSearch) por la misma razón que en setOrdering:
-            // que ambos cambios de estado lleguen juntos al efecto de
-            // fetch, no en dos renders separados.
             setDebouncedSearch(searchInput);
             setPage(1);
         }, SEARCH_DEBOUNCE_MS);
         return () => clearTimeout(handle);
     }, [searchInput]);
 
-    // --- Tareas activas ---
-    const [tasks, setTasks] = useState(() => []);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState(null);
+    // Query key de la lista activa: incluye los cuatro parámetros que
+    // determinan el resultado (igual que `currentParams` en la versión
+    // anterior). Dos combinaciones distintas de filtro/búsqueda/orden/página
+    // son, a propósito, dos entradas de caché distintas.
+    const tasksListKey = [
+        "tasks",
+        "list",
+        { completed: completedFilter, search: debouncedSearch, ordering, page },
+    ];
 
-    // --- Papelera (tareas con is_deleted=true) ---
-    const [trashTasks, setTrashTasks] = useState(() => []);
-    const [trashLoading, setTrashLoading] = useState(false);
-    const [trashError, setTrashError] = useState(null);
+    const tasksQuery = useQuery({
+        queryKey: tasksListKey,
+        queryFn: async () => {
+            try {
+                return await getTasks({ completed: completedFilter, search: debouncedSearch, ordering, page });
+            } catch (err) {
+                // DRF (PageNumberPagination) responde 404 con {"detail":
+                // "Invalid page."} cuando se pide una página que ya no
+                // existe (p.ej. se borró la última tarea visible en la
+                // página 2). En vez de quedarse en un estado de error, si
+                // todavía queda una página anterior se retrocede: cambiar
+                // `page` cambia la query key y TanStack dispara el refetch
+                // correcto solo, sin necesitar un efecto separado.
+                //
+                // No puede volverse un loop infinito: cada vez que entra acá
+                // la página baja en 1, así que en el peor caso llega a
+                // page=1; y page=1 nunca devuelve 404 (sin resultados, DRF
+                // responde 200 con results: [] en vez de fallar).
+                const requestedPage = page;
+                if (err?.response?.status === 404 && requestedPage > 1) {
+                    setPage((p) => Math.max(1, p - 1));
+                    // Esta query (para la página inválida que ya no se va a
+                    // volver a observar) SÍ queda en isError=true dentro de
+                    // TanStack — eso no se puede evitar sin dejar de
+                    // rechazar la promesa. Lo que se evita es que ese error
+                    // llegue al banner: se marca para que el `error`
+                    // consolidado de más abajo lo excluya explícitamente.
+                    // Cualquier OTRO 404 (page=1, o sin `requestedPage>1`) o
+                    // cualquier otro código de error sigue sin esta marca y
+                    // se muestra normalmente.
+                    err.isHandledPageCorrection = true;
+                }
+                throw err;
+            }
+        },
+    });
 
-    // Los cuatro parámetros de consulta soportados hasta 6.6, combinables
-    // entre sí (cambiar uno no borra los demás porque viven en estados
-    // independientes, no en un único objeto que se sobreescribe entero).
-    const currentParams = {
-        completed: completedFilter,
-        search: debouncedSearch,
-        ordering,
-        page,
+    const tasks = tasksQuery.data?.results ?? [];
+    const count = tasksQuery.data?.count ?? 0;
+    const next = tasksQuery.data?.next ?? null;
+    const previous = tasksQuery.data?.previous ?? null;
+
+    // --- Papelera: también server state, pero cargada bajo demanda. No se
+    // habilita automáticamente al montar el hook (equivalente a que
+    // `trashTasks`/`trashLoading` arrancaran en [] / false antes): solo se
+    // activa la primera vez que `loadTrash()` es invocado, igual que antes
+    // (App.jsx sigue siendo quien decide CUÁNDO llamarlo, vía su efecto
+    // sobre `view`, sin cambios). ---
+    const [trashEnabled, setTrashEnabled] = useState(false);
+    const trashQuery = useQuery({
+        queryKey: ["tasks", "trash"],
+        queryFn: getDeletedTasks,
+        enabled: trashEnabled,
+    });
+
+    const loadTrash = () => {
+        if (!trashEnabled) {
+            setTrashEnabled(true);
+        } else {
+            // App.jsx llama loadTrash() cada vez que se entra a la vista
+            // TRASH, no solo la primera vez (ver su efecto sobre `view`).
+            // refetch() fuerza la petición aunque el caché todavía esté
+            // "fresh", igual que la versión anterior siempre repetía el GET.
+            trashQuery.refetch();
+        }
     };
 
-    // `silent`: usado por toggleStatus (6.9) para revalidar tras un PATCH ya
-    // exitoso cuando la tarea sale de la vista actual. En ese caso no debe
-    // pisarse la lista optimista con "Cargando tareas..." (no toca
-    // `loading`), y un fallo de esta revalidación no debe mostrarse como
-    // error ni provocar rollback: la mutación principal ya tuvo éxito, así
-    // que este GET es best-effort (ver excepción de la página inválida más
-    // abajo, que sí debe seguir aplicando igual en modo silencioso).
-    const loadTasks = async (params = currentParams, { silent = false } = {}) => {
-        if (!silent) setLoading(true);
-        setError(null);
-        try {
-            const data = await getTasks(params);
-            setTasks(data.results);
-            setCount(data.count);
-            setNext(data.next);
-            setPrevious(data.previous);
-        } catch (err) {
-            const requestedPage = params.page ?? 1;
-            // DRF (PageNumberPagination) responde 404 con {"detail": "Invalid
-            // page."} cuando se pide una página que ya no existe. Esto puede
-            // pasar legítimamente aunque el usuario no haya tocado la
-            // paginación: p.ej. está en la página 2 y borra la última tarea
-            // visible ahí, con lo cual la página 2 deja de existir en el
-            // momento en que se vuelve a pedir tras el delete.
-            //
-            // En vez de mostrar ese error, si todavía queda una página
-            // anterior (requestedPage > 1) se retrocede una y se deja que el
-            // efecto de [completedFilter, debouncedSearch, ordering, page]
-            // dispare el refetch normal ahí, conservando el resto de los
-            // parámetros vigentes (no se tocan completed/search/ordering).
-            // Esto aplica igual en modo silencioso: la página inválida debe
-            // corregirse sí o sí para que la lista vuelva a sincronizarse,
-            // sin importar si el llamador pidió una revalidación silenciosa.
-            //
-            // Esto no puede volverse un loop infinito: cada vez que entra a
-            // esta rama la página baja en 1, así que en el peor caso llega a
-            // page=1; y page=1 nunca devuelve 404 (si no hay resultados,
-            // DRF responde 200 con results: [] en vez de fallar), por lo que
-            // la cadena de reintentos siempre termina en, como mucho,
-            // `requestedPage - 1` pasos.
-            if (err?.response?.status === 404 && requestedPage > 1) {
-                setPage(requestedPage - 1);
+    // --- Mutaciones ---
+    // Cada una usa taskService.js tal cual (ninguna llamada Axios nueva) y
+    // define su propia estrategia de invalidación/actualización de caché.
+
+    const addTaskMutation = useMutation({
+        mutationFn: (data) => createTask(data),
+        onSuccess: () => {
+            // La tarea nueva puede no pertenecer a la vista actual (filtro,
+            // búsqueda). Se invalida TODO "tasks","list" (prefijo, no query
+            // exacta) para que cualquier combinación de filtros vigente en
+            // caché quede marcada como stale, igual que antes se recargaba
+            // "la consulta actual" sin asumir dónde cae la tarea nueva.
+            queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+        },
+    });
+
+    const updateTaskMutation = useMutation({
+        mutationFn: ({ id, data }) => updateTaskApi(id, data),
+        onSuccess: () => {
+            // Editar título/estado puede sacar la tarea de la vista actual
+            // (deja de matchear `search` o `completed`); misma razón que en
+            // addTask.
+            queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+        },
+    });
+
+    const deleteTaskMutation = useMutation({
+        mutationFn: (id) => deleteTaskApi(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+            // Soft delete: la tarea pasa a ser visible en la papelera. Se
+            // invalida también esa query para que la próxima vez que se
+            // entre a esa vista no dependa únicamente del refetch-on-enter.
+            queryClient.invalidateQueries({ queryKey: ["tasks", "trash"] });
+        },
+    });
+
+    const restoreTaskMutation = useMutation({
+        mutationFn: (id) => restoreTaskApi(id),
+        onSuccess: () => {
+            queryClient.invalidateQueries({ queryKey: ["tasks", "trash"] });
+            queryClient.invalidateQueries({ queryKey: ["tasks", "list"] });
+        },
+    });
+
+    const reorderMutation = useMutation({
+        mutationFn: ({ orderedIds }) => reorderTasksApi(orderedIds),
+        onSuccess: (_data, { orderedIds, listKey }) => {
+            // El endpoint responde 200 sin cuerpo: igual que antes, el nuevo
+            // orden se reconstruye localmente a partir del propio
+            // `orderedIds` que el backend acaba de aceptar, sin round-trip
+            // adicional (setQueryData, no invalidateQueries).
+            queryClient.setQueryData(listKey, (old) => {
+                if (!old) return old;
+                const byId = new Map(old.results.map((t) => [t.id, t]));
+                return { ...old, results: orderedIds.map((id) => byId.get(id)).filter(Boolean) };
+            });
+        },
+    });
+
+    // 6.9 / optimistic update obligatorio: cancelar la query relevante,
+    // guardar snapshot, aplicar el cambio en caché, PATCH, rollback si
+    // falla, revalidar en silencio si la tarea salió de la vista actual.
+    //
+    // El rollback es específico de ESTA tarea/mutación, no un snapshot
+    // absoluto de toda la lista: si dos toggles concurrentes (tarea A y
+    // tarea B) están en vuelo y resuelven en cualquier orden, el rollback
+    // de uno no debe pisar el cambio optimista (ya aplicado o ya exitoso)
+    // del otro. Por eso:
+    // - onMutate solo guarda la tarea puntual como estaba antes (no toda la
+    //   lista/count).
+    // - onError reconstruye sobre el estado ACTUAL de la caché (updater
+    //   funcional, no un valor guardado de antes) y solo toca esa tarea y,
+    //   si corresponde, suma/resta 1 al count de forma relativa.
+    const toggleStatusMutation = useMutation({
+        mutationFn: ({ id, completed }) => updateTaskApi(id, { completed }),
+        onMutate: async ({ id, completed, removedFromView, listKey }) => {
+            await queryClient.cancelQueries({ queryKey: listKey });
+            const previousTask = queryClient
+                .getQueryData(listKey)
+                ?.results?.find((t) => t.id === id);
+
+            queryClient.setQueryData(listKey, (old) => {
+                if (!old) return old;
+                if (removedFromView) {
+                    return {
+                        ...old,
+                        count: Math.max(0, old.count - 1),
+                        results: old.results.filter((t) => t.id !== id),
+                    };
+                }
+                return {
+                    ...old,
+                    results: old.results.map((t) => (t.id === id ? { ...t, completed } : t)),
+                };
+            });
+
+            return { previousTask, removedFromView, listKey };
+        },
+        onError: (_err, _variables, context) => {
+            if (!context?.previousTask) return;
+            const { previousTask, removedFromView, listKey } = context;
+            queryClient.setQueryData(listKey, (old) => {
+                if (!old) return old;
+                const alreadyPresent = old.results.some((t) => t.id === previousTask.id);
+                return {
+                    ...old,
+                    // Relativo, no absoluto (mismo criterio que el fix de
+                    // `count` en RTK): solo se suma 1 de vuelta si ESTA
+                    // mutación fue la que restó 1 al sacar la tarea de la
+                    // vista, y solo si todavía no está presente (si otro
+                    // toggle concurrente ya la reinsertó por su cuenta, no
+                    // se vuelve a sumar).
+                    count: removedFromView && !alreadyPresent ? old.count + 1 : old.count,
+                    results: alreadyPresent
+                        ? old.results.map((t) => (t.id === previousTask.id ? previousTask : t))
+                        : [...old.results, previousTask],
+                };
+            });
+        },
+        onSuccess: (_data, { id, completed, removedFromView, listKey }) => {
+            if (removedFromView) {
+                // Igual que la revalidación "silenciosa" original: si la
+                // tarea salió de la vista, count/next/previous reales solo
+                // los sabe el backend, así que se revalida esa query
+                // puntual. Como ya hay datos en caché, esto solo activa
+                // `isFetching`, NO `isLoading` (no se pisa la lista
+                // optimista con "Cargando tareas...").
+                queryClient.invalidateQueries({ queryKey: listKey, exact: true });
                 return;
             }
-            // En modo silencioso, cualquier otro fallo de esta revalidación
-            // (red, 5xx, etc.) se ignora a propósito: no hay setError ni
-            // rollback, porque el PATCH que la disparó ya tuvo éxito. La UI
-            // optimista se mantiene tal cual quedó; en el peor caso
-            // count/next/previous quedan desactualizados hasta la próxima
-            // carga real.
-            if (!silent) {
-                setError(extractErrorMessage(err, "No se pudieron cargar las tareas."));
-            }
-        } finally {
-            if (!silent) setLoading(false);
-        }
-    };
-
-    // Vuelve a pedir el listado cada vez que cambia cualquiera de los
-    // cuatro parámetros de consulta (filtro de estado, búsqueda debounced,
-    // ordering o página). Reemplaza el filtrado local (`tasks.filter(...)`)
-    // que existía antes de 6.5: ahora Django ya devuelve solo lo que
-    // corresponde a la combinación actual de parámetros.
-    useEffect(() => {
-        loadTasks({ completed: completedFilter, search: debouncedSearch, ordering, page });
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [completedFilter, debouncedSearch, ordering, page]);
-
-    const loadTrash = async () => {
-        setTrashLoading(true);
-        setTrashError(null);
-        try {
-            const data = await getDeletedTasks();
-            setTrashTasks(data);
-        } catch (err) {
-            setTrashError(extractErrorMessage(err, "No se pudo cargar la papelera."));
-        } finally {
-            setTrashLoading(false);
-        }
-    };
-
-    const addTask = async (data) => {
-        try {
-            await createTask(data);
-            setError(null);
-            // La tarea nueva puede no pertenecer a la vista actual (p.ej. si
-            // hay un filtro `completed=true` activo y se crea una tarea
-            // incompleta, o si no coincide con la búsqueda). En vez de
-            // asumir que siempre va al principio de `tasks`, se vuelve a
-            // pedir la consulta actual para que la lista visible sea
-            // exactamente la que el backend considera válida.
-            await loadTasks();
-        } catch (err) {
-            setError(extractErrorMessage(err, "No se pudo crear la tarea."));
-            throw err;
-        }
-    };
-
-    const updateTask = async (id, data) => {
-        try {
-            await updateTaskApi(id, data);
-            setError(null);
-            // Editar el título o el estado puede sacar a la tarea de la
-            // vista actual (deja de matchear `search`, o de cumplir el
-            // filtro `completed`). Se refresca la consulta activa por la
-            // misma razón que en addTask.
-            await loadTasks();
-        } catch (err) {
-            setError(extractErrorMessage(err, "No se pudo actualizar la tarea."));
-            throw err;
-        }
-    };
-
-    const deleteTask = async (id) => {
-        try {
-            await deleteTaskApi(id);
-            setError(null);
-            // Antes de 6.6 alcanzaba con sacar la tarea del array local
-            // (el soft delete la excluye de cualquier consulta de activas
-            // sin excepción). Pero ahora `count`/`next`/`previous` también
-            // dependen de cuántas tareas activas quedan, y una remoción
-            // puramente local los dejaría desactualizados (p.ej. "next"
-            // seguiría habilitado con una página que ya no existe). Se
-            // refresca la consulta actual para mantener esa información
-            // correcta, igual que ya se hace en addTask/updateTask/toggleStatus.
-            await loadTasks();
-        } catch (err) {
-            // No se relanza: nada consume la excepción (TaskItem llama
-            // onDelete(task.id) directamente, sin await/catch), así que un
-            // throw aquí solo generaría un "unhandled promise rejection" en
-            // consola sin aportar nada — el error ya queda visible vía
-            // setError + el banner existente (igual que toggleStatus, 6.7).
-            setError(extractErrorMessage(err, "No se pudo eliminar la tarea."));
-        }
-    };
-
-    const toggleStatus = async (task) => {
-        const previousTasks = tasks;
-        const previousCount = count;
-
-        const newCompleted = !task.completed;
-        const staysInCurrentView =
-            completedFilter === undefined || completedFilter === newCompleted;
-
-        setTasks(prev =>
-            staysInCurrentView
-                ? prev.map(t => (t.id === task.id ? { ...t, completed: newCompleted } : t))
-                : prev.filter(t => t.id !== task.id)
-        );
-
-        if (!staysInCurrentView) {
-            setCount(c => Math.max(0, c - 1));
-        }
-        
-        try {
-            await updateTaskApi(task.id, { completed: newCompleted });
-            setError(null);
-            // 6.9: el PATCH ya tuvo éxito. Si la tarea salió de la vista
-            // actual, el cliente no puede saber desde aquí cuál es el
-            // count/next/previous reales (depende de cuántas tareas activas
-            // quedan y de paginación en el backend), así que se revalida en
-            // silencio la consulta vigente reutilizando loadTasks() — sin
-            // ruta HTTP paralela y sin mostrar "Cargando tareas...". Si esta
-            // revalidación falla, se ignora (ver comentario en loadTasks):
-            // no hay rollback porque la mutación principal sí tuvo éxito.
-            if (!staysInCurrentView) {
-                await loadTasks(currentParams, { silent: true });
-            }
-        } catch (err) {
-            setTasks(previousTasks);
-            setCount(previousCount);
-            setError(extractErrorMessage(err, "No se pudo actualizar el estado de la tarea."));
-        }
-    };
-
-    const restoreTask = async (id) => {
-        try {
-            await restoreTaskApi(id);
-            setTrashTasks(prev => prev.filter(task => task.id !== id));
-            // El backend conserva la posición original de la tarea restaurada
-            // (restore() no la modifica). En vez de adivinar dónde insertarla
-            // localmente, se refresca el listado activo (respetando el
-            // filtro/búsqueda/ordering vigentes) para reflejar el resultado
-            // real que calcula el servidor.
-            await loadTasks();
-            setTrashError(null);
-        } catch (err) {
-            // No se relanza: TrashItem llama onRestore(task.id) directamente
-            // sin await/catch. El error queda visible vía trashError + el
-            // banner propio de la papelera (independiente del de tareas
-            // activas, ver `error`).
-            setTrashError(extractErrorMessage(err, "No se pudo restaurar la tarea."));
-        }
-    };
-
-    const reorderTo = async (orderedIds) => {
-        try {
-            await reorderTasksApi(orderedIds);
-            // El endpoint de reorder responde 200 sin cuerpo: el nuevo orden
-            // se reconstruye localmente a partir del propio `orderedIds` que
-            // el backend acaba de aceptar (services.py ya validó que es
-            // exactamente el conjunto completo de tareas activas del
-            // usuario). Esto solo se invoca cuando `tasks` ES ese conjunto
-            // completo: sin filtro de estado, sin búsqueda, con ordering de
-            // posición, y con una sola página de resultados (ver
-            // `canReorder` en App.jsx, que ahora también exige
-            // `!next && !previous`; con paginación, `tasks` deja de ser el
-            // total de tareas activas en cuanto hay más de una página).
-            setTasks(prev => {
-                const byId = new Map(prev.map(task => [task.id, task]));
-                return orderedIds.map(id => byId.get(id)).filter(Boolean);
+            // Reafirma el valor ya confirmado por el backend sobre el
+            // estado ACTUAL de la caché (no sobre el snapshot de onMutate).
+            // Necesario para el caso "un toggle concurrente mientras OTRA
+            // mutación modifica la lista": mientras este PATCH estaba en
+            // vuelo, un create/update/delete/restore puede haber invalidado
+            // y refetcheado esta misma query key con datos del servidor
+            // tomados antes de que este PATCH terminara, pisando el
+            // optimistic update sin que nada lo hubiera confirmado después.
+            // Sin este `setQueryData`, el toggle podía "revertirse"
+            // visualmente aunque el backend ya lo hubiera aplicado. Si la
+            // tarea ya no está en la vista actual (por ese mismo refetch
+            // intermedio), el `.map` no encuentra el id y no hace nada.
+            queryClient.setQueryData(listKey, (old) => {
+                if (!old) return old;
+                return {
+                    ...old,
+                    results: old.results.map((t) => (t.id === id ? { ...t, completed } : t)),
+                };
             });
-            setError(null);
-        } catch (err) {
-            // No se relanza: moveTask() no tiene su propio try/catch (solo
-            // hace `await reorderTo(...)`), y quien la invoca (TaskItem, vía
-            // onMoveUp/onMoveDown) tampoco captura la promesa. El error ya
-            // queda visible vía setError + el banner existente.
-            setError(extractErrorMessage(err, "No se pudo reordenar las tareas."));
-        }
+        },
+    });
+
+    // --- Wrappers públicos: mismo nombre/firma que la versión anterior, así
+    // App.jsx no necesita cambios. ---
+
+    const addTask = (data) => addTaskMutation.mutateAsync(data);
+    // mutateAsync re-lanza en error (igual que el `throw err` de antes):
+    // App.jsx (handleSave) sigue pudiendo hacer try/await/catch tal cual.
+
+    const updateTask = (id, data) => updateTaskMutation.mutateAsync({ id, data });
+
+    const deleteTask = (id) => deleteTaskMutation.mutate(id);
+    // .mutate (no .mutateAsync, sin await): TaskItem llama onDelete(id)
+    // fire-and-forget, igual que antes. El error queda expuesto vía
+    // deleteTaskMutation.isError más abajo, sin unhandled rejection.
+
+    const restoreTask = (id) => restoreTaskMutation.mutate(id);
+
+    const reorderTo = (orderedIds) => {
+        reorderMutation.mutate({ orderedIds, listKey: tasksListKey });
     };
 
-    // Mueve una tarea activa una posición hacia arriba o abajo dentro de
-    // `tasks` y envía el nuevo orden completo al backend. Solo tiene
-    // sentido llamarla cuando `tasks` es efectivamente el conjunto
-    // completo de tareas activas del usuario (ver `canReorder` en
-    // App.jsx); con un filtro, búsqueda, ordering distinto de posición, o
-    // más de una página, `tasks` es un subconjunto o un orden parcial.
-    const moveTask = async (taskId, direction) => {
-        const index = tasks.findIndex(task => task.id === taskId);
+    // Mueve una tarea activa una posición hacia arriba/abajo dentro de
+    // `tasks` y envía el nuevo orden completo al backend. Solo tiene sentido
+    // cuando `tasks` es el conjunto completo de tareas activas (ver
+    // `canReorder` en App.jsx, sin cambios).
+    const moveTask = (taskId, direction) => {
+        const index = tasks.findIndex((task) => task.id === taskId);
         if (index === -1) return;
 
         const targetIndex = direction === "up" ? index - 1 : index + 1;
         if (targetIndex < 0 || targetIndex >= tasks.length) return;
 
         const reordered = [...tasks];
-        [reordered[index], reordered[targetIndex]] = [
-            reordered[targetIndex],
-            reordered[index],
-        ];
+        [reordered[index], reordered[targetIndex]] = [reordered[targetIndex], reordered[index]];
 
-        await reorderTo(reordered.map(task => task.id));
+        reorderTo(reordered.map((task) => task.id));
     };
 
-    // Solo avanzan si el backend efectivamente indicó que hay una página
-    // siguiente/anterior (`next`/`previous`); si no, no hacen nada (el
-    // botón correspondiente además queda deshabilitado en la UI).
+    const toggleStatus = (task) => {
+        const newCompleted = !task.completed;
+        const staysInCurrentView =
+            completedFilter === undefined || completedFilter === newCompleted;
+
+        toggleStatusMutation.mutate({
+            id: task.id,
+            completed: newCompleted,
+            removedFromView: !staysInCurrentView,
+            listKey: tasksListKey,
+        });
+    };
+
     const goToNextPage = () => {
-        if (next) setPage(p => p + 1);
+        if (next) setPage((p) => p + 1);
     };
 
     const goToPreviousPage = () => {
-        if (previous) setPage(p => Math.max(1, p - 1));
+        if (previous) setPage((p) => Math.max(1, p - 1));
+    };
+
+    // --- Error consolidado ---
+    // La UI original (App.jsx) usa UN solo campo `error` para el banner de
+    // tareas activas Y (en el mismo render, mismo valor) para decidir si
+    // oculta la lista entera (`error ? null : tasks.length === 0 ? ... :
+    // tasks.map(...)`). Eso es correcto cuando el error es de LA LISTA
+    // (no hay datos válidos que mostrar). Pero un fallo de `toggleStatus`
+    // es un error de UNA mutación puntual: `tasksQuery.data` sigue teniendo
+    // la lista completa y correcta (el rollback de arriba ya la dejó bien),
+    // así que no hay ninguna razón para esconderla. Por eso el error de
+    // `toggleStatusMutation` NO entra a este campo (ver investigación
+    // completa en la respuesta de este cambio). Las demás mutaciones
+    // (create/update/delete/reorder) no se tocaron: no era el problema
+    // reportado y cambiar su alcance no fue pedido en esta corrección.
+    const error =
+        (tasksQuery.isError &&
+            !tasksQuery.error?.isHandledPageCorrection &&
+            extractErrorMessage(tasksQuery.error, "No se pudieron cargar las tareas.")) ||
+        (addTaskMutation.isError && extractErrorMessage(addTaskMutation.error, "No se pudo crear la tarea.")) ||
+        (updateTaskMutation.isError && extractErrorMessage(updateTaskMutation.error, "No se pudo actualizar la tarea.")) ||
+        (deleteTaskMutation.isError && extractErrorMessage(deleteTaskMutation.error, "No se pudo eliminar la tarea.")) ||
+        (reorderMutation.isError && extractErrorMessage(reorderMutation.error, "No se pudo reordenar las tareas.")) ||
+        null;
+
+    const trashError =
+        (trashQuery.isError && extractErrorMessage(trashQuery.error, "No se pudo cargar la papelera.")) ||
+        (restoreTaskMutation.isError && extractErrorMessage(restoreTaskMutation.error, "No se pudo restaurar la tarea.")) ||
+        null;
+
+    // Error de `toggleStatus`, deliberadamente SEPARADO de `error`: no debe
+    // participar en el `error ? null : tasks...` de App.jsx (eso ocultaría
+    // toda la lista por el fallo de una sola tarea). `retryToggleStatus`
+    // usa `toggleStatusMutation.variables` — las variables con las que se
+    // llamó `.mutate()` la última vez, una primitiva propia de
+    // `useMutation`, no una estructura global nueva — para reintentar
+    // exactamente la misma mutación que falló.
+    const toggleError =
+        (toggleStatusMutation.isError &&
+            extractErrorMessage(toggleStatusMutation.error, "No se pudo actualizar el estado de la tarea.")) ||
+        null;
+
+    const retryToggleStatus = () => {
+        if (toggleStatusMutation.variables) {
+            toggleStatusMutation.mutate(toggleStatusMutation.variables);
+        }
     };
 
     return {
         tasks,
-        loading,
+        // `isLoading` = sin datos en caché todavía para esta query key
+        // (primera carga real de esta combinación de filtros/página). Una
+        // combinación ya vista antes (caché fresh/stale) no vuelve a mostrar
+        // "Cargando tareas...", solo refetch de fondo — comportamiento nuevo
+        // que da TanStack Query "gratis" y que la versión anterior (sin
+        // caché) no tenía.
+        loading: tasksQuery.isLoading,
         error,
-        retryLoadTasks: () => loadTasks(),
+        retryLoadTasks: () => tasksQuery.refetch(),
 
-        // Query server-side (6.5)
         completedFilter,
         setCompletedFilter,
         searchInput,
@@ -369,7 +421,6 @@ export const useTasks = () => {
         ordering,
         setOrdering,
 
-        // Paginación (6.6)
         page,
         count,
         next,
@@ -377,8 +428,8 @@ export const useTasks = () => {
         goToNextPage,
         goToPreviousPage,
 
-        trashTasks,
-        trashLoading,
+        trashTasks: trashQuery.data ?? [],
+        trashLoading: trashQuery.isLoading,
         trashError,
         loadTrash,
         restoreTask,
@@ -388,5 +439,7 @@ export const useTasks = () => {
         deleteTask,
         toggleStatus,
         moveTask,
+        toggleError,
+        retryToggleStatus,
     };
 };
