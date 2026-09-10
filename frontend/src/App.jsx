@@ -48,6 +48,8 @@ function TodoApp() {
     updateTask,
     restoreTask,
     moveTask,
+    toggleError,
+    retryToggleStatus,
   } = useTasks();
 
   // La papelera se carga bajo demanda (no en cada render ni junto con las
@@ -165,6 +167,15 @@ function TodoApp() {
               <div className="error-banner">
                 <p>{error}</p>
                 <button className="secondary-btn" onClick={retryLoadTasks}>
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {toggleError && (
+              <div className="error-banner">
+                <p>{toggleError}</p>
+                <button className="secondary-btn" onClick={retryToggleStatus}>
                   Reintentar
                 </button>
               </div>
