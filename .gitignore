@@ -42,3 +42,6 @@ __pycache__/
 
 # Django
 *.sqlite3
+
+.next/
+next-env.d.ts
