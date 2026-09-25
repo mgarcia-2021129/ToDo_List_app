@@ -7,7 +7,7 @@
 // se dispare cualquier llamada, para que el cliente generado apunte al backend
 // correcto sin tener que tocar el código generado (que no debe editarse a mano).
 //
-// Este archivo se importa una única vez desde main.jsx, antes de renderizar <App />.
+// Este archivo se importa una única vez desde client-root.jsx, antes de renderizar <App />.
 import axios from "axios";
 import {
   getAccessToken,
@@ -16,7 +16,7 @@ import {
   clearTokens,
 } from "../utils/tokenStorage";
 
-axios.defaults.baseURL = import.meta.env.VITE_API_URL;
+axios.defaults.baseURL = process.env.NEXT_PUBLIC_API_URL;
 
 // Rutas de autenticación: nunca deben llevar el Authorization header de un
 // access token viejo, ni disparar el flujo de refresh si responden 401/403
